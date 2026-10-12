@@ -13,6 +13,7 @@ router.group('/', (router) => {
         router.post('/save', customFormsController.save)
         router.post('/change-status', customFormsController.changeStatus)
         router.post('/delete', customFormsController.deleteForm)
+        router.post('/duplicate', customFormsController.duplicateForm)
         router.get('/submissions/:id', customFormsController.viewSubmissions)
         router.post(
             '/submissions/delete',

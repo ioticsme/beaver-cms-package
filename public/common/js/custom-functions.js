@@ -68,6 +68,63 @@ function deleteItem(element) {
         }
     })
 }
+//- Duplicate item, then open the copy if the server returns a redirect
+function duplicateItem(element) {
+    const id = element.getAttribute('id')
+    const url = element.getAttribute('url')
+
+    const showError = (text) =>
+        Swal.fire({
+            text: text || 'Something went wrong !.',
+            icon: 'warning',
+            buttonsStyling: !1,
+            confirmButtonText: 'Ok, got it!',
+            customClass: {
+                confirmButton: 'btn fw-bold btn-primary',
+            },
+        })
+
+    Swal.fire({
+        text: 'Are you sure you want to duplicate this item ?',
+        icon: 'question',
+        showCancelButton: !0,
+        buttonsStyling: !1,
+        confirmButtonText: 'Yes, duplicate!',
+        cancelButtonText: 'No, cancel',
+        customClass: {
+            confirmButton: 'btn fw-bold btn-primary',
+            cancelButton: 'btn fw-bold btn-active-light-primary',
+        },
+    }).then((e) => {
+        if (e.value) {
+            fetch(url, {
+                method: 'POST',
+                cache: 'no-cache',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    id,
+                }),
+            })
+                .then(async (res) => {
+                    const status = res.status
+                    let data = await res.json()
+                    if (status >= 200 && status < 300) {
+                        if (data.redirect) {
+                            location.href = data.redirect
+                        } else {
+                            location.reload()
+                        }
+                    } else {
+                        showError(data.error)
+                    }
+                })
+                .catch(() => showError())
+        }
+    })
+}
 //- Change  status
 function changeStatus(element, status) {
     const id = element.getAttribute('id')

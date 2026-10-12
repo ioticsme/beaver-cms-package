@@ -100,6 +100,9 @@
 													<a class="menu-link px-3" href="/admin/custom-forms/edit/{{ item._id }}">Edit</a>
 												</div>
 												<div class="menu-item px-3">
+													<a class="menu-link px-3" id="{{ item._id }}" url="/admin/custom-forms/duplicate" onClick="duplicateItem(this)">Duplicate</a>
+												</div>
+												<div class="menu-item px-3">
 													<a class="menu-link px-3" href="/admin/custom-forms/submissions/{{ item._id }}">View Submission</a>
 												</div>
 												{% set url = "/admin/custom-forms/change-status" %}

@@ -201,6 +201,7 @@ let privileges = async (req) => [
                     '/admin/custom-forms/save',
                     '/admin/custom-forms/change-status',
                     '/admin/custom-forms/delete',
+                    '/admin/custom-forms/duplicate',
                 ],
             },
             {

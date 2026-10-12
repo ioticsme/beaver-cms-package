@@ -458,6 +458,62 @@ const deleteForm = async (req, res) => {
     }
 }
 
+const duplicateForm = async (req, res) => {
+    try {
+        const { id } = req.body
+        // If id not found
+        if (!id) {
+            return res.status(404).json({ error: 'Id not found' })
+        }
+
+        const form = await CustomForm.findOne({
+            _id: id,
+            brand: req.authUser.brand._id,
+            country: req.authUser.brand.country,
+            deleted: { $ne: true },
+        }).lean()
+        if (!form) {
+            return res.status(404).json({ error: 'Custom form not found' })
+        }
+
+        // Find a name whose slug (form type) is not taken yet.
+        // The type is derived from form_name.en the same way save() does it.
+        let copyNumber = 1
+        let form_name, type
+        do {
+            const suffix = copyNumber > 1 ? ` Copy ${copyNumber}` : ' Copy'
+            form_name = {
+                ...form.form_name,
+                en: `${form.form_name.en}${suffix}`,
+                ar: `${form.form_name.ar ?? form.form_name.en}${suffix}`,
+            }
+            type = slugify(form_name.en.toLowerCase())
+            copyNumber++
+        } while (
+            await CustomForm.exists({ type, deleted: { $ne: true } })
+        )
+
+        const { _id, __v, created_at, updated_at, ...formData } = form
+        const copy = await CustomForm.create({
+            ...formData,
+            form_name,
+            type,
+            // Keep the copy offline until it has been reviewed
+            published: false,
+            fields: (form.fields || []).map(({ _id, ...field }) => field),
+        })
+
+        return res.status(200).json({
+            message: 'Custom form duplicated',
+            id: copy._id,
+            redirect: `/admin/custom-forms/edit/${copy._id}`,
+        })
+    } catch (error) {
+        console.log(error)
+        return res.status(500).json({ error: 'Something went wrong' })
+    }
+}
+
 const viewSubmissions = async (req, res) => {
     try {
         session = req.authUser
@@ -691,6 +747,7 @@ module.exports = {
     save,
     changeStatus,
     deleteForm,
+    duplicateForm,
     viewSubmissions,
     viewSubmission,
     deleteSubmissions,
