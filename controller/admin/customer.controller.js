@@ -2,7 +2,6 @@ const { logError } = require('../../helper/Logger.helper')
 const User = require('../../model/User') // Import the User model for database operations
 const AjaxPaginationCustomerResource = require('../../resources/api/ajaxPaginationCustomer.resource') // Import the resource for handling AJAX pagination
 
-let session // Declare session variable for storing user session data
 
 // Function to render the customer listing page
 const list = async (req, res) => {
@@ -19,7 +18,7 @@ const list = async (req, res) => {
 // Function to handle fetching customers with AJAX pagination
 const customers = async (req, res) => {
     try {
-        session = req.authUser // Store the authenticated user session
+        const session = req.authUser // Store the authenticated user session
 
         // Extract pagination and sorting parameters from the request query
         let { draw, start, length } = req.query

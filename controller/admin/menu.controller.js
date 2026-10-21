@@ -231,7 +231,7 @@ const editMenu = async (req, res) => {
 
 const saveEditMenu = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         let labelValidationObj = {}
         let pathValidationObj = {}
         req.authUser.brand.languages.forEach((lang) => {

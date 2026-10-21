@@ -3,7 +3,6 @@ const Joi = require('joi') // Import Joi for input validation
 const bcrypt = require('bcryptjs') // Import bcrypt for password hashing and comparison
 const Admin = require('../../model/Admin') // Import the Admin model
 const Brand = require('../../model/Brand') // Import the Brand model
-var session = require('express-session') // Import express-session for session management
 const Settings = require('../../model/Settings') // Import Settings model
 const Country = require('../../model/Country')
 const Language = require('../../model/Language')
@@ -31,6 +30,13 @@ const signup = async (req, res) => {
 // Handles form submission for signup
 const signupSubmit = async (req, res) => {
     try {
+        // Signup is only allowed to bootstrap the very first admin. If one
+        // already exists, refuse — otherwise anyone could create a super_admin.
+        const existingAdmin = await Admin.findOne({ deleted: { $ne: true } })
+        if (existingAdmin) {
+            return res.status(403).json({ error: 'Signup is not allowed' })
+        }
+
         // Define Joi schema to validate the signup form data
         const schema = Joi.object({
             name: Joi.string().required().max(60), // Name field is required with a max length of 60 characters
@@ -172,7 +178,7 @@ const loginSubmit = async (req, res) => {
             const domain = domains?.[0] || {}
 
             // Store admin details in the session
-            session = req.session
+            const session = req.session
             session.admin_id = admin?._id
             session.admin_name = admin?.name
             session.admin_role = admin?.role

@@ -13,11 +13,10 @@ const ContentType = require('../../model/ContentType')
 const { getRevisionObject } = require('../../helper/Revision.helper')
 const { logError } = require('../../helper/Logger.helper')
 
-let session
 
 const list = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         // return res.send(req.contentType._id)
         const contentList = await Content.find({
             type_id: req.contentType._id,
@@ -58,7 +57,7 @@ const list = async (req, res) => {
 
 const detail = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const contentDetail = await Content.findOne({
             _id: req.params.id,
             type_id: req.contentType._id,
@@ -121,7 +120,7 @@ const duplicateContent = async (req, res) => {
             return await duplicateSingleTypeContent(req, res)
         }
 
-        session = req.authUser
+        const session = req.authUser
         const contentDetail = await Content.findOne({
             _id: req.params.id,
             type_id: req.contentType._id,
@@ -156,7 +155,7 @@ const duplicateContent = async (req, res) => {
 
 const duplicateSingleTypeContent = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const contentDetail = await Content.findOne({
             _id: req.params.id,
             type_id: req.contentType._id,
@@ -284,7 +283,7 @@ const generateSlugForContent = async (
 
 const add = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         let allowed_content = {}
         if (req.contentType?.allowed_type?.length) {
             const data = await Content.find({
@@ -342,7 +341,7 @@ const add = async (req, res) => {
 
 const edit = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         let allowed_content = {}
         const contentDetail = await Content.findOne({
             _id: req.params.id,

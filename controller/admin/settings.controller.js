@@ -5,7 +5,6 @@ const _ = require('lodash')
 const collect = require('collect.js')
 const Brand = require('../../model/Brand')
 const Country = require('../../model/Country')
-var session = require('express-session')
 const Settings = require('../../model/Settings')
 const Redis = require('../../helper/Redis.helper')
 const Admin = require('../../model/Admin')
@@ -15,7 +14,7 @@ const { getCountry, getBrand } = require('../../helper/Cache.helper')
 const switchBrand = async (req, res) => {
     try {
         if (req.query.b && req.query.d) {
-            session = req.authUser
+            const session = req.authUser
 
             const country = await getCountry({
                 query: {
@@ -68,7 +67,7 @@ const switchBrand = async (req, res) => {
 // General settings
 const generalList = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const country = session.brand.country
         const brand = await Brand.findOne({
             _id: session.brand._id,
@@ -93,7 +92,7 @@ const generalList = async (req, res) => {
 // Render logo edit form
 const editLogo = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         let data
         let isBrand = false
         if (req.query.brand == 'true') {
@@ -200,7 +199,7 @@ const changeLogo = async (req, res) => {
 
 const changeBrandStatus = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const keys = {
             1: 'maintenance_mode',
             2: 'ecommerce_maintenance_mode',
@@ -234,7 +233,7 @@ const clearCache = async (req, res) => {
 // SEO settings
 const seoList = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const brand = await Brand.findOne({
             _id: session.brand._id,
             'domains.country': session.brand.country,
@@ -254,7 +253,7 @@ const seoList = async (req, res) => {
 }
 const seoEdit = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const brand = await Brand.findOne({
             _id: session.brand._id,
             'domains.country': session.brand.country,
@@ -275,7 +274,7 @@ const seoEdit = async (req, res) => {
 
 const seoSave = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
 
         let bilingualFields = ['title', 'description', 'keywords', 'image']
         let bilingualValidationObj = {}
@@ -357,7 +356,7 @@ const seoSave = async (req, res) => {
 // Marketing settings
 const marketingList = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const brand = await Brand.findOne({
             _id: session.brand._id,
         })
@@ -369,7 +368,7 @@ const marketingList = async (req, res) => {
 }
 const marketingEdit = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const brand = await Brand.findOne({
             _id: session.brand._id,
         })
@@ -381,7 +380,7 @@ const marketingEdit = async (req, res) => {
 
 const marketingSave = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const schema = Joi.object({
             gtm_id: Joi.string().required().allow(''),
             google_analytics_id: Joi.string().required().allow(''),
@@ -428,7 +427,7 @@ const marketingSave = async (req, res) => {
 // Ecommerce Settings
 const ecommerceList = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const settings = await Settings.findOne({
             brand: session.brand._id,
             country: session.brand.country,
@@ -442,7 +441,7 @@ const ecommerceList = async (req, res) => {
 }
 const invoiceEdit = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const settings = await Settings.findOne({
             brand: session.brand._id,
             country: session.brand.country,
@@ -457,7 +456,7 @@ const invoiceEdit = async (req, res) => {
 
 const invoiceSave = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         let addressValidationObj = {}
         let termsValidationObj = {}
         let footerValidationObj = {}
@@ -535,7 +534,7 @@ const invoiceSave = async (req, res) => {
 // Notification Settings
 const notificationList = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const settings = await Settings.findOne({
             brand: session.brand._id,
             country: session.brand.country,
@@ -554,7 +553,7 @@ const notificationList = async (req, res) => {
 
 const editNotificationSettings = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const settings = await Settings.findOne({
             brand: session.brand._id,
             country: session.brand.country,

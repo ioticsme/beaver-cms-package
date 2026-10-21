@@ -16,7 +16,6 @@ const { mailGunTemplates } = require('../../helper/Mailgun.helper')
 const { formatInTimeZone } = require('date-fns-tz')
 const { format } = require('date-fns')
 
-let session
 
 const FIELD_TYPES = [
     {
@@ -67,7 +66,7 @@ const FIELD_TYPES = [
 
 const list = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
 
         const forms = await CustomForm.find({
             brand: session.brand._id,
@@ -84,7 +83,7 @@ const list = async (req, res) => {
 
 const edit = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const form = await CustomForm.findOne({
             _id: req.params.id,
             brand: session.brand._id,
@@ -112,7 +111,7 @@ const edit = async (req, res) => {
 }
 const viewAPI = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         const form = await CustomForm.findOne({
             _id: req.params.id,
             brand: session.brand._id,
@@ -182,7 +181,7 @@ axios.request(config)
 
 const add = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
         let domainTemplates = []
         // domainTemplates = await mailGunTemplates()
         domainTemplates = []
@@ -204,7 +203,7 @@ const add = async (req, res) => {
 const save = async (req, res) => {
     try {
         // console.log(req.body)
-        session = req.authUser
+        const session = req.authUser
         // BEGIN:: Validation rule
         const schema = Joi.object({
             id: Joi.optional().allow(null, ''),
@@ -516,7 +515,7 @@ const duplicateForm = async (req, res) => {
 
 const viewSubmissions = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
 
         const reqForm = await CustomForm.findOne({
             _id: req.params.id,
@@ -548,7 +547,7 @@ const viewSubmissions = async (req, res) => {
 
 const viewSubmission = async (req, res) => {
     try {
-        session = req.authUser
+        const session = req.authUser
 
         const customForm = await CustomForm.findOne({
             _id: req.params.formId,
@@ -608,7 +607,7 @@ const deleteSubmissions = async (req, res) => {
 }
 
 const exportSubmissions = async (req, res) => {
-    session = req.authUser
+    const session = req.authUser
     // Create a new workbook
     const workbook = new Excel.Workbook()
     // Add a new worksheet
