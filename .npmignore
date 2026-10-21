@@ -16,3 +16,5 @@ gulpfile.js
 gulp.config.js
 *.d.ts
 .npmrc
+db-fix-scripts/
+.env
