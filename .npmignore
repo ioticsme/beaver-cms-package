@@ -18,3 +18,5 @@ gulp.config.js
 .npmrc
 db-fix-scripts/
 .env
+/logs/
+TASK.md
