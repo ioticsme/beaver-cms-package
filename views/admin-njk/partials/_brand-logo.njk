@@ -1,0 +1,13 @@
+{#
+  Logo with a client-name fallback.
+  Shows the image when a usable URL is configured; if there is none, or the image
+  fails to load (404, not an image), the text is shown instead.
+#}
+{% macro brandLogo(src, text, imgClass='', textClass='') %}
+    {%- if src -%}
+        <img class="{{ imgClass }}" alt="{{ text }}" src="{{ src }}" onerror="this.style.display='none';this.nextElementSibling.classList.remove('d-none');">
+        <span class="d-none {{ textClass }}">{{ text }}</span>
+    {%- else -%}
+        <span class="{{ textClass }}">{{ text }}</span>
+    {%- endif -%}
+{% endmacro %}

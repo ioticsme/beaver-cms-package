@@ -7,6 +7,31 @@ const fs = require('fs')
 const Media = require('../../model/Media')
 const { getCache, setCache, removeCache } = require('../../helper/Redis.helper')
 const { logError, logWarn } = require('../../helper/Logger.helper')
+const { audit } = require('../../helper/AuditLog.helper')
+
+const fileInfo = (file = {}) => ({
+    original_name: file.originalname,
+    mime_type: file.mimetype,
+    size: file.size,
+    field: file.fieldname,
+})
+
+const auditUpload = (req, media, file, source) =>
+    audit(req, {
+        module: 'media',
+        action: 'upload',
+        status: media?._id ? 'success' : 'failure',
+        entity: media?._id
+            ? { type: 'media', id: media._id, label: file?.originalname }
+            : undefined,
+        meta: {
+            source,
+            drive: media?.drive,
+            url: media?.url,
+            file_type: media?.file_type,
+            ...fileInfo(file),
+        },
+    })
 
 let cacheKey = `${envConfig.cache.CACHE_KEY_PREFIX}-media-json-list`
 
@@ -87,7 +112,8 @@ const fileUpload = async (req, res) => {
                 )
                 let fieldName = req.files[i].fieldname.split('.')[0]
                 let fieldLang = req.files[i].fieldname.split('.')[1]
-                const media = await uploadMedia(base64, 'media', file) // Upload media
+                const media = await uploadMedia(base64, 'media', file, req) // Upload media
+                auditUpload(req, media, file, 'media_library')
                 // Deleting the image saved to temp/ folder after upload
                 fs.unlinkSync(`temp/${file.filename}`)
                 if (media && media._id) {
@@ -127,6 +153,7 @@ const articleImageUpload = async (req, res) => {
             'base64'
         )
         const media = await uploadMedia(base64, 'article', file, req) // Upload media
+        auditUpload(req, media, file, 'article_editor')
         // If upload fails, return an error
         if (!(media && media._id)) {
             return res.status(503).json({
@@ -161,7 +188,8 @@ const ckEditorFileUpload = async (req, res) => {
     let file = req.files[0]
     // Creating base64 from file
     const base64 = Buffer.from(fs.readFileSync(file.path)).toString('base64')
-    const media = await uploadMedia(base64, 'media', file) // Upload media
+    const media = await uploadMedia(base64, 'media', file, req) // Upload media
+    auditUpload(req, media, file, 'ckeditor')
     // Deleting the image saved to temp/ folder after upload
     fs.unlinkSync(`temp/${file.filename}`)
     // If upload fails, return error
@@ -206,6 +234,23 @@ const deleteMedia = async (req, res) => {
                 _id: id,
             }) // Remove media from database
         }
+        audit(req, {
+            module: 'media',
+            action: 'delete',
+            status: deleteFile ? 'success' : 'failure',
+            entity: {
+                type: 'media',
+                id: media._id,
+                label: media.upload_info?.original_name || media.meta?.title || media.url,
+            },
+            meta: {
+                drive: media.drive,
+                url: media.url,
+                file_type: media.file_type,
+                uploaded_by: media.upload_info?.admin_email || media.upload_info?.admin_name,
+                uploaded_at: media.created_at,
+            },
+        })
 
         await removeCache([cacheKey])
 
@@ -228,6 +273,10 @@ const addMetaInfo = async (req, res) => {
             return res.status(404).json({ error: 'Media not found' })
         }
 
+        const before = await Media.findOne({ _id: id }).lean()
+        if (!before) {
+            return res.status(404).json({ error: 'Media not found' })
+        }
         await Media.updateOne(
             {
                 _id: id,
@@ -246,6 +295,14 @@ const addMetaInfo = async (req, res) => {
                 },
             }
         )
+        const after = await Media.findOne({ _id: id }).lean()
+        audit(req, {
+            module: 'media',
+            action: 'update_meta',
+            entity: { type: 'media', id, label: after?.meta?.title || after?.url },
+            before: { meta: before.meta, has_link: before.has_link, link_url: before.link_url, open_link_in_new_tab: before.open_link_in_new_tab },
+            after: { meta: after?.meta, has_link: after?.has_link, link_url: after?.link_url, open_link_in_new_tab: after?.open_link_in_new_tab },
+        })
 
         await removeCache([cacheKey])
 

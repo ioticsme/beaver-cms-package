@@ -1,0 +1,150 @@
+{% extends "../layouts/master.njk" %}
+
+{% macro val(v) %}{% if v === undefined or v === null %}<span class="text-muted fst-italic">empty</span>{% elif v is string or v is number %}{{ v }}{% else %}<pre class="mb-0 fs-8">{{ prettyJson(v) }}</pre>{% endif %}{% endmacro %}
+
+{% block content %}
+    {% block title %}
+		<title>Audit Log | {{browserTitle | upper()}} CMS</title>
+	{% endblock %}
+
+    <div class="app-main flex-column flex-row-fluid" id="kt_app_main">
+        <div class="d-flex flex-column flex-column-fluid">
+            <div id="kt_app_toolbar" class="app-toolbar pt-2 pt-lg-10">
+                <div id="kt_app_toolbar_container" class="app-container container-fluid d-flex align-items-stretch">
+                    <div class="app-toolbar-wrapper d-flex flex-stack flex-wrap gap-4 w-100">
+                        <div class="page-title d-flex flex-column justify-content-center gap-1 me-3">
+                            <h1 class="page-heading d-flex flex-column justify-content-center text-gray-900 fw-bold fs-3 m-0">
+                                {{ log.module }} · {{ log.action }}
+                                {% if log.status == 'failure' %}<span class="badge badge-danger ms-2 align-self-start">failed</span>{% endif %}
+                            </h1>
+                            <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0">
+                                <li class="breadcrumb-item text-muted"><a href="/admin/dashboard" class="text-muted text-hover-primary">Home</a></li>
+                                <li class="breadcrumb-item"><span class="bullet bg-gray-500 w-5px h-2px"></span></li>
+                                <li class="breadcrumb-item text-muted"><a href="/admin/logs/audit" class="text-muted text-hover-primary">Audit Logs</a></li>
+                                <li class="breadcrumb-item"><span class="bullet bg-gray-500 w-5px h-2px"></span></li>
+                                <li class="breadcrumb-item text-muted">{{ log._id }}</li>
+                            </ul>
+                        </div>
+                        <a href="/admin/logs/audit" class="btn btn-sm btn-light">Back to list</a>
+                    </div>
+                </div>
+            </div>
+
+            <div id="kt_app_content" class="app-content flex-column-fluid">
+                <div id="kt_app_content_container" class="app-container container-fluid">
+                    <div class="row g-5">
+                        <div class="col-12 col-xl-4">
+                            <div class="card card-flush mb-5">
+                                <div class="card-header"><h3 class="card-title">Who</h3></div>
+                                <div class="card-body pt-0">
+                                    <table class="table table-sm fs-7 mb-0">
+                                        <tr><th class="text-muted w-125px">Admin</th><td>{{ log.actor.name or '—' }}</td></tr>
+                                        <tr><th class="text-muted">Email</th><td>{{ log.actor.email or '—' }}</td></tr>
+                                        <tr><th class="text-muted">Role</th><td>{{ log.actor.role or '—' }}</td></tr>
+                                        <tr><th class="text-muted">Admin id</th><td>
+                                            {% if log.actor.admin_id %}<a href="/admin/logs/audit?admin={{ log.actor.admin_id }}">{{ log.actor.admin_id }}</a>{% else %}—{% endif %}
+                                        </td></tr>
+                                        <tr><th class="text-muted">When</th><td><span class="js-local-date" data-date="{{ log.created_at.toISOString() }}">{{ log.created_at.toISOString() }}</span></td></tr>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="card card-flush mb-5">
+                                <div class="card-header"><h3 class="card-title">From where</h3></div>
+                                <div class="card-body pt-0">
+                                    <table class="table table-sm fs-7 mb-0">
+                                        <tr><th class="text-muted w-125px">IP</th><td>
+                                            {% if log.request.ip %}<a href="/admin/logs/audit?ip={{ log.request.ip | urlencode }}">{{ log.request.ip }}</a>{% else %}—{% endif %}
+                                        </td></tr>
+                                        <tr><th class="text-muted">Forwarded for</th><td class="text-break">{{ log.request.forwarded_for or '—' }}</td></tr>
+                                        <tr><th class="text-muted">User agent</th><td class="text-break">{{ log.request.user_agent or '—' }}</td></tr>
+                                        <tr><th class="text-muted">Request</th><td class="text-break"><code>{{ log.request.method }} {{ log.request.url }}</code></td></tr>
+                                        {% if log.request.status_code %}<tr><th class="text-muted">Response</th><td>{{ log.request.status_code }}{% if log.request.duration_ms !== undefined %} · {{ log.request.duration_ms }} ms{% endif %}</td></tr>{% endif %}
+                                        <tr><th class="text-muted">Brand</th><td>{{ log.brand.code or '—' }}{% if log.brand.country_code %} / {{ log.brand.country_code }}{% endif %}</td></tr>
+                                    </table>
+                                </div>
+                            </div>
+                            {% if related.length %}
+                            <div class="card card-flush mb-5">
+                                <div class="card-header"><h3 class="card-title">History of this record</h3></div>
+                                <div class="card-body pt-0">
+                                    <ul class="list-unstyled fs-7 mb-0">
+                                        {% for r in related %}
+                                            <li class="mb-2">
+                                                <a href="/admin/logs/audit/view/{{ r._id }}">{{ r.module }} · {{ r.action }}</a>
+                                                {% if r.status == 'failure' %}<span class="badge badge-light-danger">failed</span>{% endif %}
+                                                <div class="text-muted fs-8">{{ r.actor.email or r.actor.name }} · <span class="js-local-date" data-date="{{ r.created_at.toISOString() }}">{{ r.created_at.toISOString() }}</span></div>
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-12 col-xl-8">
+                            <div class="card card-flush mb-5">
+                                <div class="card-header"><h3 class="card-title">Record</h3></div>
+                                <div class="card-body pt-0">
+                                    <table class="table table-sm fs-7 mb-0">
+                                        <tr><th class="text-muted w-125px">Type</th><td>{{ log.entity.type or '—' }}</td></tr>
+                                        <tr><th class="text-muted">Id</th><td>
+                                            {% if log.entity.id %}<a href="/admin/logs/audit?entity_id={{ log.entity.id }}">{{ log.entity.id }}</a>{% else %}—{% endif %}
+                                        </td></tr>
+                                        <tr><th class="text-muted">Name</th><td>{{ log.entity.label or '—' }}</td></tr>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="card card-flush mb-5">
+                                <div class="card-header"><h3 class="card-title">Changes{% if log.changes %} ({{ log.changes.length }}){% endif %}</h3></div>
+                                <div class="card-body pt-0">
+                                    {% if log.changes and log.changes.length %}
+                                        <div class="table-responsive">
+                                            <table class="table table-row-dashed table-sm fs-7 align-top">
+                                                <thead><tr class="text-muted fw-bold text-uppercase fs-8"><th class="min-w-150px">Field</th><th class="min-w-200px">Before</th><th class="min-w-200px">After</th></tr></thead>
+                                                <tbody>
+                                                    {% for c in log.changes %}
+                                                        <tr>
+                                                            <td><code>{{ c.path }}</code></td>
+                                                            <td class="bg-light-danger text-break">{{ val(c.from) }}</td>
+                                                            <td class="bg-light-success text-break">{{ val(c.to) }}</td>
+                                                        </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    {% else %}
+                                        <p class="text-muted mb-0">No field-level changes recorded for this entry.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if log.meta %}
+                            <div class="card card-flush mb-5">
+                                <div class="card-header"><h3 class="card-title">Details</h3></div>
+                                <div class="card-body pt-0"><pre class="fs-8 mb-0">{{ prettyJson(log.meta) }}</pre></div>
+                            </div>
+                            {% endif %}
+
+                            {% if log.request.body %}
+                            <div class="card card-flush mb-5">
+                                <div class="card-header"><h3 class="card-title">Submitted data</h3></div>
+                                <div class="card-body pt-0"><pre class="fs-8 mb-0">{{ prettyJson(log.request.body) }}</pre></div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block customScript %}
+    <script>
+        document.querySelectorAll('.js-local-date').forEach(function (el) {
+            var d = new Date(el.getAttribute('data-date'))
+            if (!isNaN(d)) el.textContent = d.toLocaleString()
+        })
+    </script>
+{% endblock %}

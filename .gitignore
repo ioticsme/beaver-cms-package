@@ -11,7 +11,7 @@ test/
 log/
 .DS_Store
 *.log
-logs/
+/logs/
 .DS_Store
 /public/firebase-messaging-sw.js
 /public/admin/assets/

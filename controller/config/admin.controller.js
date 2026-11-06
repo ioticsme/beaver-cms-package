@@ -5,6 +5,11 @@ const Joi = require('joi')
 const bcrypt = require('bcryptjs')
 
 const Admin = require('../../model/Admin')
+const { auditAdminAccount } = require('../../helper/AuditLog.helper')
+const {
+    checkAdminSave,
+    refuseAdminSave,
+} = require('../../helper/AdminAccountGuard.helper')
 const { getPrivileges } = require('../../middleware/cmsAuth.middleware')
 const envConfig = require('../../config/env.config')
 const { logError } = require('../../helper/Logger.helper')
@@ -95,6 +100,29 @@ const save = async (req, res) => {
             return
         }
 
+        // Load the target first and refuse edits the current admin may not make
+        let target = null
+        if (req.body.id) {
+            target = await Admin.findOne({
+                _id: req.body.id,
+                deleted: { $ne: true },
+            }).lean()
+            if (!target) {
+                return refuseAdminSave(req, res, 'admin_user', {
+                    status: 404,
+                    reason: 'target_not_found',
+                    message: 'Admin not found',
+                })
+            }
+        }
+        const refusal = checkAdminSave(req, {
+            target,
+            requestedRole: req.body.role,
+        })
+        if (refusal) {
+            return refuseAdminSave(req, res, 'admin_user', refusal, target)
+        }
+
         let options = {
             email: req.body.email,
             deleted: { $ne: true },
@@ -132,15 +160,21 @@ const save = async (req, res) => {
             if (req.body.password) {
                 data['password'] = bcrypt.hashSync(req.body.password, salt)
             }
+            const before = target
             await Admin.updateOne(
                 {
                     _id: req.body.id,
                 },
                 data
             )
+            const after = await Admin.findOne({ _id: req.body.id }).lean()
+            auditAdminAccount(req, 'admin_user', 'update', before, after, {
+                password_changed: !!req.body.password,
+            })
         } else {
             data['password'] = bcrypt.hashSync(req.body.password, salt)
-            await Admin.create(data)
+            const created = await Admin.create(data)
+            auditAdminAccount(req, 'admin_user', 'create', null, created)
         }
 
         return res.status(200).json({
@@ -173,6 +207,13 @@ const changeStatus = async (req, res) => {
         if (!update?._id) {
             return res.status(404).json({ error: 'Activation error' })
         }
+        auditAdminAccount(
+            req,
+            'admin_user',
+            update.active ? 'deactivate' : 'activate',
+            update,
+            { ...update.toObject(), active: !update.active }
+        )
         return res.status(200).json({
             message: `Admin status changed`,
         })
@@ -190,11 +231,20 @@ const deleteItem = async (req, res) => {
             return res.status(404).json({ error: 'Id not found' })
         }
 
-        //soft delete item
+        const before = await Admin.findOne({
+            _id: id,
+            role: { $ne: 'super_admin' },
+            deleted: { $ne: true },
+        }).lean()
+        if (!before) {
+            return res.status(404).json({ error: 'Admin not found' })
+        }
+        // soft delete item
         await Admin.updateOne(
             { _id: id, role: { $ne: 'super_admin' }, deleted: { $ne: true } },
             { $set: { deleted: true, deleted_at: new Date() } }
         )
+        auditAdminAccount(req, 'admin_user', 'delete', before, null)
         return res.status(200).json({
             message: `Admin Deleted`,
         })

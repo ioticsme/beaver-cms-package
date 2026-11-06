@@ -1,4 +1,5 @@
 const { logError } = require('./Logger.helper')
+const envConfig = require('../config/env.config')
 
 const incrementVersion = (version = '') => {
     if (!version.length) return ''
@@ -17,32 +18,41 @@ const incrementVersion = (version = '') => {
     return parts.join('.')
 }
 
-const getRevisionObject = (content = {}, authUser = {}) => {
+// Returns the record's revisions with a snapshot of its current (pre-save) state appended.
+// Used for both Content and ContentType. Keeps the last REVISION_LIMIT snapshots.
+const getRevisionObject = (
+    content = {},
+    authUser = {},
+    limit = envConfig.audit.REVISION_LIMIT
+) => {
     try {
         let latestRevision = content.revisions?.[content.revisions.length - 1]
         let contentToStore = {
-            ...content?._doc,
+            ...(content?._doc || content),
             revisions: [],
         }
 
         let newRevision = {
             content: contentToStore,
             editor: authUser.admin_id,
+            editor_name: authUser.admin_name,
+            created_at: new Date(),
             revision_number: incrementVersion(
                 latestRevision?.revision_number || '0.0.1'
             ),
         }
 
-        // Add new revision and maintain only the last 6 revisions
+        // Add new revision and keep only the last `limit` revisions
         let updatedRevisions = [...(content.revisions || []), newRevision]
-        if (updatedRevisions.length > 6) {
-            updatedRevisions = updatedRevisions.slice(-6)
+        if (updatedRevisions.length > limit) {
+            updatedRevisions = updatedRevisions.slice(-limit)
         }
 
         return updatedRevisions || []
     } catch (error) {
         logError(error)
-        return {}
+        // Keep the existing history rather than wiping it on an error
+        return content?.revisions || []
     }
 }
 

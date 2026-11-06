@@ -24,13 +24,48 @@ const {
 } = require('../adaptors/file-upload/AwsS3.adaptor.js')
 const { decryptData } = require('./Operations.helper.js')
 const { logError } = require('./Logger.helper.js')
+const { getClientIp } = require('./AuditLog.helper.js')
+const Media = require('../model/Media')
+
+// Record who uploaded a file and from where on the Media document.
+const stampUploadInfo = async (media, folder, file, req) => {
+    if (!media?._id) return media
+    try {
+        const s = req?.authUser || req?.session || {}
+        const upload_info = {
+            admin_id: s.admin_id || null,
+            admin_name: s.admin_name,
+            admin_email: s.admin_email,
+            admin_role: s.admin_role,
+            ip: req ? getClientIp(req) : undefined,
+            user_agent: req?.headers?.['user-agent'],
+            original_name: file?.originalname,
+            mime_type: file?.mimetype,
+            size: file?.size,
+            folder,
+            brand: s.brand?._id || null,
+            country: s.brand?.country || null,
+        }
+        await Media.updateOne({ _id: media._id }, { $set: { upload_info } })
+        media.upload_info = upload_info
+    } catch (error) {
+        logError(error)
+    }
+    return media
+}
 
 const getDriveConfig = async () => {
     const config = await Config.findOne()
     return config?.media_drive
 }
-// Upload function internally uses ImageKit, Cloudinary, Azure Blob, S3, or local storage
-const uploadMedia = async (media, folder, file) => {
+// Upload function internally uses ImageKit, Cloudinary, Azure Blob, S3, or local storage.
+// Pass `req` so the uploader, IP and file details are stored on the Media record.
+const uploadMedia = async (media, folder, file, req = null) => {
+    const result = await uploadToDrive(media, folder, file)
+    return stampUploadInfo(result, folder, file, req)
+}
+
+const uploadToDrive = async (media, folder, file) => {
     try {
         const media_drive_config = await getDriveConfig()
         if (media_drive_config.default_drive == 'local') {

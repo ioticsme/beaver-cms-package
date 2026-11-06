@@ -125,6 +125,27 @@ const ContentTypeSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        last_edited_user: {
+            type: Schema.ObjectId,
+            ref: 'Admin',
+        },
+        // Snapshot of the previous state on every save (same as Content.revisions)
+        revisions: [
+            {
+                content: Object,
+                editor: {
+                    type: Schema.ObjectId,
+                    ref: 'Admin',
+                },
+                editor_name: String,
+                // No default on purpose: older revisions have no date and must not get "now".
+                created_at: Date,
+                revision_number: {
+                    type: String,
+                    default: '0.0.1',
+                },
+            },
+        ],
     },
     {
         timestamps: {

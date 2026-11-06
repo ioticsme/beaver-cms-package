@@ -34,6 +34,21 @@ const MediaSchema = new mongoose.Schema(
         file: {
             type: Object,
         },
+        // Who uploaded the file and from where (for auditing)
+        upload_info: {
+            admin_id: { type: mongoose.Schema.ObjectId, ref: 'Admin', default: null },
+            admin_name: String,
+            admin_email: String,
+            admin_role: String,
+            ip: String,
+            user_agent: String,
+            original_name: String,
+            mime_type: String,
+            size: Number,
+            folder: String,
+            brand: { type: mongoose.Schema.ObjectId, default: null },
+            country: { type: mongoose.Schema.ObjectId, default: null },
+        },
         file_type: {
             type: String,
             required: true,

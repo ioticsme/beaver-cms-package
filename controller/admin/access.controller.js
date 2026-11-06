@@ -2,6 +2,11 @@ const Joi = require('joi')
 const bcrypt = require('bcryptjs')
 
 const Admin = require('../../model/Admin')
+const { auditAdminAccount } = require('../../helper/AuditLog.helper')
+const {
+    checkAdminSave,
+    refuseAdminSave,
+} = require('../../helper/AdminAccountGuard.helper')
 const { privileges } = require('../../config/userPrivilege.config')
 const envConfig = require('../../config/env.config')
 const { logError } = require('../../helper/Logger.helper')
@@ -101,6 +106,30 @@ const save = async (req, res) => {
             return
         }
 
+        // Load the target first and refuse edits the current admin may not make
+        let target = null
+        if (req.body.id) {
+            target = await Admin.findOne({
+                _id: req.body.id,
+                deleted: { $ne: true },
+            }).lean()
+            if (!target) {
+                return refuseAdminSave(req, res, 'access_user', {
+                    status: 404,
+                    reason: 'target_not_found',
+                    message: 'Admin not found',
+                })
+            }
+        }
+        const refusal = checkAdminSave(req, {
+            target,
+            requestedRole: req.body.role,
+            editableRoles: ['admin', 'editor', 'finance'],
+        })
+        if (refusal) {
+            return refuseAdminSave(req, res, 'access_user', refusal, target)
+        }
+
         // Check if the email is already taken, excluding the current admin (if updating)
         let options = {
             email: req.body.email,
@@ -141,15 +170,21 @@ const save = async (req, res) => {
             if (req.body.password) {
                 data['password'] = bcrypt.hashSync(req.body.password, salt)
             }
+            const before = target
             await Admin.updateOne(
                 {
-                    _id: req.body.id, // Find the admin by ID for update
+                    _id: req.body.id,
                 },
                 data
             )
+            const after = await Admin.findOne({ _id: req.body.id }).lean()
+            auditAdminAccount(req, 'access_user', 'update', before, after, {
+                password_changed: !!req.body.password,
+            })
         } else {
             data['password'] = bcrypt.hashSync(req.body.password, salt)
-            await Admin.create(data) // Create a new admin
+            const created = await Admin.create(data)
+            auditAdminAccount(req, 'access_user', 'create', null, created)
         }
 
         return res.status(200).json({
@@ -184,6 +219,13 @@ const changeStatus = async (req, res) => {
         if (!update?._id) {
             return res.status(404).json({ error: 'Activation error' })
         }
+        auditAdminAccount(
+            req,
+            'access_user',
+            update.active ? 'deactivate' : 'activate',
+            update,
+            { ...update.toObject(), active: !update.active }
+        )
         return res.status(200).json({
             message: `User status changed`, // Success message on status change
         })
@@ -201,11 +243,20 @@ const deleteItem = async (req, res) => {
             return res.status(404).json({ error: 'Id not found' }) // Return error if no ID provided
         }
 
-        // Soft delete the admin (ensure 'super_admin' cannot be deleted)
+        const before = await Admin.findOne({
+            _id: id,
+            role: { $ne: 'super_admin' },
+            deleted: { $ne: true },
+        }).lean()
+        if (!before) {
+            return res.status(404).json({ error: 'Admin not found' })
+        }
+        // soft delete item
         await Admin.updateOne(
-            { _id: id, role: { $ne: 'super_admin' } },
-            { deleted: true, deleted_at: new Date() }
+            { _id: id, role: { $ne: 'super_admin' }, deleted: { $ne: true } },
+            { $set: { deleted: true, deleted_at: new Date() } }
         )
+        auditAdminAccount(req, 'access_user', 'delete', before, null)
         return res.status(200).json({
             message: `User Deleted`, // Success message for deletion
         })

@@ -39,6 +39,24 @@ const AdminSchema = new mongoose.Schema(
             type: Boolean,
             default: true,
         },
+        // Soft delete. These were written by the delete handlers but missing from the
+        // schema, so Mongoose stripped them and deleted admins could still sign in.
+        deleted: {
+            type: Boolean,
+            default: false,
+        },
+        deleted_at: {
+            type: Date,
+            default: null,
+        },
+        last_login_at: {
+            type: Date,
+            default: null,
+        },
+        last_login_ip: {
+            type: String,
+            default: null,
+        },
     },
     {
         timestamps: {

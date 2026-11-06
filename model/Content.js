@@ -83,6 +83,9 @@ const ContentSchema = new mongoose.Schema(
                     type: Schema.ObjectId,
                     ref: 'Admin',
                 },
+                editor_name: String,
+                // No default on purpose: older revisions have no date and must not get "now".
+                created_at: Date,
                 revision_number: {
                     type: String,
                     default: '0.0.1',

@@ -205,6 +205,36 @@ const navConfig = [
             // },
         ],
     },
+    {
+        section: 'Logs',
+        section_slug: 'logs',
+        position: 10,
+        has_access: ['super_admin', 'admin'],
+        items: [
+            {
+                label: 'Audit Logs',
+                expandable: false,
+                has_access: ['super_admin', 'admin'],
+                icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path opacity="0.3" d="M19 22H5C4.4 22 4 21.6 4 21V3C4 2.4 4.4 2 5 2H14L20 8V21C20 21.6 19.6 22 19 22Z" fill="currentColor"/>
+                <path d="M15 8H20L14 2V7C14 7.6 14.4 8 15 8ZM8 12H16V13.5H8V12ZM8 15.5H16V17H8V15.5ZM8 8.5H12V10H8V8.5Z" fill="currentColor"/>
+                </svg>`,
+                position: 1,
+                path: '/admin/logs/audit',
+            },
+            {
+                label: 'Server Logs',
+                expandable: false,
+                has_access: ['super_admin', 'admin'],
+                icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path opacity="0.3" d="M21 10H3C2.4 10 2 9.6 2 9V4C2 3.4 2.4 3 3 3H21C21.6 3 22 3.4 22 4V9C22 9.6 21.6 10 21 10ZM22 20V15C22 14.4 21.6 14 21 14H3C2.4 14 2 14.4 2 15V20C2 20.6 2.4 21 3 21H21C21.6 21 22 20.6 22 20Z" fill="currentColor"/>
+                <path d="M6 7.5C6 8.3 5.3 9 4.5 9C3.7 9 3 8.3 3 7.5V5.5C3 4.7 3.7 4 4.5 4C5.3 4 6 4.7 6 5.5V7.5ZM6 16.5C6 15.7 5.3 15 4.5 15C3.7 15 3 15.7 3 16.5V18.5C3 19.3 3.7 20 4.5 20C5.3 20 6 19.3 6 18.5V16.5Z" fill="currentColor"/>
+                </svg>`,
+                position: 2,
+                path: '/admin/logs/server',
+            },
+        ],
+    },
 ]
 
 const getBaseNavConfig = async () => {

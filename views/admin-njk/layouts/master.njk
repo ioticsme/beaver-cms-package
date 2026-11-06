@@ -72,7 +72,9 @@
                                     </div>
                                 </div>
                                 <div class="d-flex align-items-center flex-grow-1 flex-lg-grow-0">
-                                    <a class="d-lg-none" href="{{ LANDING_URL }}"><img class="h-30px" alt="Logo aa" src="`#`">
+                                    {% from '../partials/_brand-logo.njk' import brandLogo %}
+                                    <a class="d-lg-none text-decoration-none" href="{{ LANDING_URL }}">
+                                        {{ brandLogo(cmsLogoSmall, browserTitle, 'h-30px', 'text-gray-900 fw-bold fs-4') }}
                                     </a>
                                 </div>
                                 <div
@@ -294,6 +296,20 @@
                             mainAccordion.classList.add('here', 'show')
                         }
                     })
+                })
+
+                // Each nav click is a full page load, so the sidebar scroll resets to the top.
+                // Bring the active menu item into view inside the sidebar (without moving the page).
+                window.addEventListener('load', function () {
+                    var scroller = document.getElementById('beaver_sidebar_scroll')
+                    if (!scroller) return
+                    var activeLink = scroller.querySelector('.menu-link.active') || scroller.querySelector('.menu-item.here > .menu-link')
+                    if (!activeLink) return
+                    var scrollerRect = scroller.getBoundingClientRect()
+                    var linkRect = activeLink.getBoundingClientRect()
+                    if (linkRect.top < scrollerRect.top || linkRect.bottom > scrollerRect.bottom) {
+                        scroller.scrollTop += linkRect.top - scrollerRect.top - (scroller.clientHeight - linkRect.height) / 2
+                    }
                 })
             </script>
             <script src='/cms-static/admin/assets/plugins/global/plugins.bundle.js'></script>

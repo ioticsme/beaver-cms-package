@@ -1,11 +1,30 @@
+{% from './_brand-logo.njk' import brandLogo %}
+{# Highlight the current page in the sidebar. The theme's active styles are scoped to
+   .app-sidebar, which #main-nav doesn't use. Kept here, not in style.bundle.css,
+   because /public/admin/assets/ is not tracked in git. #}
+<style>
+    #main-nav .menu-item .menu-link.active {
+        background-color: rgba(255, 255, 255, 0.14);
+        box-shadow: inset 3px 0 0 #fff;
+        transition: background-color 0.2s ease;
+    }
+    #main-nav .menu-item .menu-link.active .menu-title { font-weight: 600; color: #fff; }
+    #main-nav .menu-item .menu-link.active .menu-icon .svg-icon,
+    #main-nav .menu-item .menu-link.active .menu-icon i { color: #fff; }
+    #main-nav .menu-item .menu-link.active .menu-bullet .bullet { background-color: #fff; }
+</style>
 <div class="app-sidebar-logo px-6">
-    <a href="{{LANDING_URL}}" class="m-auto">
-        <img class="h-50px app-sidebar-logo-default" alt="Logo" src="{{cmsLogoLarge}}">
-        <img class="h-20px app-sidebar-logo-minimize" alt="Logo" src="{{cmsLogoSmall}}">
+    <a href="{{LANDING_URL}}" class="m-auto text-center text-decoration-none mw-100">
+        <span class="app-sidebar-logo-default">
+            {{ brandLogo(cmsLogoLarge, browserTitle, 'h-50px', 'text-white fw-bold fs-3 text-truncate d-inline-block mw-100 align-middle') }}
+        </span>
+        <span class="app-sidebar-logo-minimize">
+            {{ brandLogo(cmsLogoSmall, clientInitials or browserTitle, 'h-20px', 'text-white fw-bold fs-5') }}
+        </span>
     </a>
 </div>
 <hr/>
-<div class="overflow-y-auto flex-1">
+<div class="overflow-y-auto flex-1" id="beaver_sidebar_scroll">
     <div class="menu menu-column menu-rounded menu-sub-indention px-3" id="#beaver_app_sidebar_menu" data-beaver-menu="true" data-beaver-menu-expand="false">
         {% if authUser.admin_role == 'super_admin' %}
             <div class="menu-item pt-5">

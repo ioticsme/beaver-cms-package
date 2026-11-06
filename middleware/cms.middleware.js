@@ -28,10 +28,31 @@ try {
     customNavConfig = []
 }
 
+// Only absolute http(s) URLs or site-relative paths count as a logo; anything else
+// (empty, "undefined", a bare word, a typo'd scheme) falls back to the client name.
+const usableLogoUrl = (value) => {
+    const url = String(value || '').trim()
+    if (!url || /\s/.test(url)) return ''
+    if (/^https?:\/\/[^/]+/i.test(url) || /^\/(?!\/)/.test(url)) return url
+    return ''
+}
+
+const clientInitials = (name = '') =>
+    String(name)
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w) => w[0].toUpperCase())
+        .join('')
+
 const baseConfig = async (req, res, next) => {
-    res.locals.browserTitle = `${envConfig.general.CLIENT_NAME}`
-    res.locals.cmsLogoLarge = `${envConfig.general.CMS_LOGO_LARGE}`
-    res.locals.cmsLogoSmall = `${envConfig.general.CMS_LOGO_SMALL}`
+    const clientName = `${envConfig.general.CLIENT_NAME}`
+    const logoLarge = usableLogoUrl(envConfig.general.CMS_LOGO_LARGE)
+    res.locals.browserTitle = clientName
+    res.locals.clientInitials = clientInitials(clientName)
+    res.locals.cmsLogoLarge = logoLarge
+    res.locals.cmsLogoSmall = usableLogoUrl(envConfig.general.CMS_LOGO_SMALL) || logoLarge
     res.locals.globalModuleConfig = globalModuleConfig
     res.locals.hasEcommerce = envConfig.general.HAS_ECOMMERCE
     res.locals.LANDING_URL = envConfig.general.ADMIN_LANDING_URL
@@ -418,6 +439,7 @@ const authUser = async (req, res, next) => {
 }
 
 module.exports = {
+    usableLogoUrl,
     baseConfig,
     contentTypeCheck,
     mainNavGenerator,

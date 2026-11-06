@@ -4,6 +4,7 @@ const joiPassword = Joi.extend(joiPasswordExtendCore) // Extend Joi with the joi
 const bcrypt = require('bcryptjs') // Import bcrypt for hashing and comparing passwords
 const Admin = require('../../model/Admin') // Import the Admin model
 const { logError } = require('../../helper/Logger.helper')
+const { audit } = require('../../helper/AuditLog.helper')
 
 // Fetches and renders the profile details of the currently authenticated admin user
 const userDetail = async (req, res) => {
@@ -86,15 +87,32 @@ const profileUpdateSave = async (req, res) => {
         // Check if the provided password matches the admin's stored hashed password
         if (bcrypt.compareSync(req.body.password, admin.password)) {
             // Update the admin's name and email if the password matches
+            const before = { name: admin.name, email: admin.email }
             admin.name = req.body.name
             admin.email = req.body.email
-            admin.save()
+            await admin.save()
+            req.session.admin_name = admin.name
+            req.session.admin_email = admin.email
+            audit(req, {
+                module: 'profile',
+                action: 'update',
+                entity: { type: 'admin', id: admin._id, label: admin.email },
+                before,
+                after: { name: admin.name, email: admin.email },
+            })
 
             // Return a success message after the profile is updated
             return res.status(200).json({
                 message: 'Profile details updated successfully',
             })
         } else {
+            audit(req, {
+                module: 'profile',
+                action: 'update',
+                status: 'failure',
+                entity: { type: 'admin', id: admin?._id, label: admin?.email },
+                meta: { reason: 'wrong_password' },
+            })
             // If the password doesn't match, return a 401 Unauthorized error
             return res.status(401).json({ error: 'Invalid email or password' })
         }
@@ -180,6 +198,13 @@ const changePasswordSave = async (req, res) => {
             admin.password = await bcrypt.hashSync(req.body.new_password, salt)
             await admin.save()
 
+            // Must be written before the session is destroyed (the actor comes from it)
+            audit(req, {
+                module: 'profile',
+                action: 'change_password',
+                entity: { type: 'admin', id: admin._id, label: admin.email },
+            })
+
             // Destroy the current session to force re-login after password change
             req.session.destroy()
 
@@ -188,6 +213,13 @@ const changePasswordSave = async (req, res) => {
                 message: 'Admin password updated successfully',
             })
         } else {
+            audit(req, {
+                module: 'profile',
+                action: 'change_password',
+                status: 'failure',
+                entity: { type: 'admin', id: admin?._id, label: admin?.email },
+                meta: { reason: 'wrong_current_password' },
+            })
             // If the current password doesn't match, return a 401 Unauthorized error
             return res.status(401).json({ error: 'Invalid password' })
         }

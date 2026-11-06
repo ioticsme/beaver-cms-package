@@ -12,6 +12,16 @@ const metaFields = require('../../config/meta-fields.config')
 const ContentType = require('../../model/ContentType')
 const { getRevisionObject } = require('../../helper/Revision.helper')
 const { logError } = require('../../helper/Logger.helper')
+const { audit, labelOf } = require('../../helper/AuditLog.helper')
+
+const contentEntity = (req, doc) => ({
+    type: req.contentType?.slug || doc?.type_slug,
+    id: doc?._id,
+    label: labelOf(doc),
+})
+
+const latestRevisionNumber = (revisions = []) =>
+    revisions?.[revisions.length - 1]?.revision_number
 
 
 const list = async (req, res) => {
@@ -139,11 +149,19 @@ const duplicateContent = async (req, res) => {
             contentDetail.slug
         )
 
-        await Content.create({
+        const copy = await Content.create({
             ...contentDetail,
             _id: new ObjectId(),
             slug: newSlug,
             author: req.authUser?.admin_id,
+            last_edited_user: req.authUser?.admin_id,
+            revisions: [],
+        })
+        audit(req, {
+            module: 'content',
+            action: 'duplicate',
+            entity: contentEntity(req, copy),
+            meta: { source_id: contentDetail._id, source_slug: contentDetail.slug },
         })
 
         return res.redirect('back')
@@ -185,7 +203,20 @@ const duplicateSingleTypeContent = async (req, res) => {
             _id: new ObjectId(),
             title: `${contentType.title}-${newContentTypeSlug?.count}`,
             slug: newContentTypeSlug?.slug,
+            revisions: [],
         })
+        if (newContentType?._id) {
+            audit(req, {
+                module: 'content_type',
+                action: 'duplicate',
+                entity: {
+                    type: 'content_type',
+                    id: newContentType._id,
+                    label: newContentType.title,
+                },
+                meta: { source_id: contentType._id, source_slug: contentType.slug },
+            })
+        }
 
         if (!newContentType?._id) {
             return res.render(`admin-njk/app-error-500`)
@@ -197,13 +228,21 @@ const duplicateSingleTypeContent = async (req, res) => {
             contentDetail.slug
         )
 
-        await Content.create({
+        const copy = await Content.create({
             ...contentDetail,
             _id: new ObjectId(),
             slug: newContentSlug,
             type_id: newContentType._id,
             type_slug: newContentType.slug,
             author: req.authUser?.admin_id,
+            last_edited_user: req.authUser?.admin_id,
+            revisions: [],
+        })
+        audit(req, {
+            module: 'content',
+            action: 'duplicate',
+            entity: { type: newContentType.slug, id: copy._id, label: labelOf(copy) },
+            meta: { source_id: contentDetail._id, source_type: contentDetail.type_slug },
         })
 
         return res.redirect(`/admin/cms/${newContentType.slug}`)
@@ -419,14 +458,38 @@ const deleteContent = async (req, res) => {
             return res.status(404).json({ error: 'Id not found' })
         }
 
+        const before = await Content.findOne({
+            _id: id,
+            brand: req.authUser.brand._id,
+            country: req.authUser.brand.country,
+            deleted: { $ne: true },
+        }).lean()
+        if (!before) {
+            return res.status(404).json({ error: 'Content not found' })
+        }
+
         await Content.updateOne(
             {
                 _id: id,
                 brand: req.authUser.brand._id,
                 country: req.authUser.brand.country,
             },
-            { deleted: true, deleted_at: new Date() }
+            {
+                deleted: true,
+                deleted_at: new Date(),
+                last_edited_user: req.authUser.admin_id,
+            }
         )
+        audit(req, {
+            module: 'content',
+            action: 'delete',
+            entity: contentEntity(req, before),
+            meta: {
+                soft_delete: true,
+                status_before: before.status,
+                revision: latestRevisionNumber(before.revisions),
+            },
+        })
 
         // :TODO: Remove cache
         const countryCode = req.authUser.brand?.country_code
@@ -473,6 +536,12 @@ const changeStatus = async (req, res) => {
         if (!update?._id) {
             return res.status(404).json({ error: 'Something went wrong' })
         }
+        audit(req, {
+            module: 'content',
+            action: newStatus === 'published' ? 'publish' : 'unpublish',
+            entity: contentEntity(req, update),
+            changes: [{ path: 'status', from: update.status, to: newStatus }],
+        })
 
         // :TODO: @Ebrahim, commented this because of error with countryCode
         const countryCode = req.authUser.brand?.country_code
@@ -597,6 +666,12 @@ const savePageBuilderContent = async (req, res) => {
                 _id: req.body._id,
                 deleted: { $ne: true },
             })
+            if (!existingContent) {
+                return res.status(404).json({ error: 'Content not found' })
+            }
+            data.last_edited_user = req.authUser.admin_id
+            data.author = existingContent.author || req.authUser.admin_id
+            data.revisions = getRevisionObject(existingContent, req.authUser)
             const collection_cache_key = `${envConfig.cache.CACHE_KEY_PREFIX}-content-${req.authUser.brand.code}-${countryCode}-${type.slug}`
             const single_item_cache_key = `${envConfig.cache.CACHE_KEY_PREFIX}-content-${req.authUser.brand.code}-${countryCode}-${type.slug}-${existingContent.slug}`
             // Update content
@@ -604,6 +679,15 @@ const savePageBuilderContent = async (req, res) => {
                 { _id: req.body._id, deleted: { $ne: true } },
                 data
             )
+            const updated = await Content.findOne({ _id: req.body._id }).lean()
+            audit(req, {
+                module: 'content',
+                action: 'update',
+                entity: contentEntity(req, updated),
+                before: existingContent,
+                after: updated,
+                meta: { revision: latestRevisionNumber(updated?.revisions) },
+            })
             Redis.removeCache([collection_cache_key, single_item_cache_key])
             return res.status(201).json({
                 message: 'Content updated successfully',
@@ -616,6 +700,12 @@ const savePageBuilderContent = async (req, res) => {
             if (!save?._id) {
                 return res.status(400).json({ error: 'Something went wrong' })
             }
+            audit(req, {
+                module: 'content',
+                action: 'create',
+                entity: contentEntity(req, save),
+                after: save,
+            })
             const collection_cache_key = `${envConfig.cache.CACHE_KEY_PREFIX}-content-${req.authUser.brand.code}-${countryCode}-${type.slug}`
             Redis.removeCache([collection_cache_key])
             return res.status(200).json({
@@ -1013,6 +1103,15 @@ const saveDefaultContent = async (req, res) => {
                 { _id: req.body._id, deleted: { $ne: true } },
                 data
             )
+            const updated = await Content.findOne({ _id: req.body._id }).lean()
+            audit(req, {
+                module: 'content',
+                action: 'update',
+                entity: contentEntity(req, updated),
+                before: existingContent,
+                after: updated,
+                meta: { revision: latestRevisionNumber(updated?.revisions) },
+            })
             Redis.removeCache([collection_cache_key, single_item_cache_key])
             return res.status(201).json({
                 message: 'Content updated successfully',
@@ -1025,6 +1124,12 @@ const saveDefaultContent = async (req, res) => {
             if (!save?._id) {
                 return res.status(400).json({ error: 'Something went wrong' })
             }
+            audit(req, {
+                module: 'content',
+                action: 'create',
+                entity: contentEntity(req, save),
+                after: save,
+            })
             const collection_cache_key = `${envConfig.cache.CACHE_KEY_PREFIX}-content-${req.authUser.brand.code}-${countryCode}-${type.slug}`
             Redis.removeCache([collection_cache_key])
             return res.status(200).json({
@@ -1122,9 +1227,24 @@ const savePageBuilderData = async (req, res) => {
                         html: req.body.html,
                         css: req.body.css,
                     },
+                    last_edited_user: req.authUser.admin_id,
+                    revisions: getRevisionObject(page, req.authUser),
                 },
             }
         )
+        const updated = await Content.findOne({ _id: req.body.id }).lean()
+        audit(req, {
+            module: 'content',
+            action: 'update',
+            entity: contentEntity(req, updated),
+            before: page,
+            after: updated,
+            meta: {
+                editor: 'page_builder',
+                lang: req.body.lang,
+                revision: latestRevisionNumber(updated?.revisions),
+            },
+        })
 
         return res.status(200).json('Saved')
     } catch (error) {

@@ -179,6 +179,7 @@ It returns `503` when `domain.maintenance_mode` is on. The result is attached as
 /admin/settings/*                 general (logo, cache clear), seo, ecommerce/invoice, switch-brand
 /admin/custom-forms/*             form builder, duplicate, submissions/export [unless HAS_CUSTOM_FORM_MANAGEMENT]
 /admin/logs/server[/json]         server log viewer (reads <cwd>/logs)
+/admin/logs/audit[/json|/export|/view/:id]  audit log viewer (super_admin, admin)
 /admin/admin-user/*               own profile / password
 /admin/config/*   (super_admin)   admin, country, language, brand, content-type, admin-nav, app-settings
 /admin/upload-article-image       editor inline image upload
@@ -314,6 +315,49 @@ collection). It defines one job, `job queues`, which calls
 `info-YYYY-MM-DD.log`, `warn-…`, `error.log` and `exception.log`. Use `logError(err)`,
 `logWarn(msg)` and `logInfo(msg)` instead of `console.log`. You can view the logs at `/admin/logs/server`.
 
+### 11.1 Audit log (who changed what)
+
+Every admin action is written to the `audit_logs` collection (`model/AuditLog.js`) and can be
+browsed, filtered and exported to CSV at `/admin/logs/audit` (super admins and admins only; there is
+no privilege id for it on purpose). Each entry holds the actor (id, name, email, role — copied, so it
+survives the admin being renamed or deleted), `module` + `action`, `status` (`success`/`failure`), the
+record (`entity.type/id/label`), a field-level `changes` diff (`[{ path, from, to }]`), `meta`, the request
+(IP, `X-Forwarded-For`, user agent, method, URL, status code, duration) and the active brand/country.
+
+Two layers write entries:
+
+1. **Explicit** `audit(req, {...})` calls (`helper/AuditLog.helper.js`) with before/after diffs:
+   - `auth`: signup, login (success and every failure reason), logout. Login also stores
+     `Admin.last_login_at` / `last_login_ip`.
+   - `content`: create, update (+ revision number), publish/unpublish, delete, duplicate, page-builder saves.
+   - `content_type`: create, update, update_fields, update_meta, delete (full snapshot), duplicate.
+   - `media`: upload (file name, MIME type, size, drive, source), delete, update_meta.
+   - `admin_user` (`/admin/config/admin`) and `access_user` (`/admin/access-control/users`): create,
+     update, activate/deactivate, delete — with privileges added/removed and role changes.
+   - `profile`: update, change_password (success and failure).
+   - `audit_log`: export.
+2. **Catch-all** `auditTrail` middleware (`middleware/audit.middleware.js`, mounted on `/admin`): every
+   other non-GET request by a signed-in admin, plus sensitive GETs (brand switch, submission view/export,
+   audit log view/export), is logged once the response is sent, with the redacted request body.
+   Module/action come from the path (`/admin/config/brand/save` → `config.brand` / `save`).
+   Requests already logged explicitly are skipped (`req.auditLogged`).
+
+Rules: secrets are never stored (keys such as `password`, `token`, `secret`, `api_key`, `private_key`,
+`connection_string`, `otp`, `cookie` are replaced with `[REDACTED]`), long strings are cut at
+`AUDIT_LOG_MAX_VALUE_LENGTH`, and an audit write failure is logged but never fails the admin action.
+Entries are append-only: update/delete queries on the model throw. All writes go through
+`writeAuditLog()`, so the storage backend can be changed in one place.
+
+The client IP is `req.ip`. It is only the real client IP when `trust proxy` is set (the package sets it
+in production); `request.forwarded_for` keeps the raw header either way.
+
+**Revisions:** `Content.revisions` and now `ContentType.revisions` keep a snapshot of the record as it
+was before each save, with `editor`, `editor_name` and `created_at` (`helper/Revision.helper.js`, last
+`REVISION_LIMIT` kept). Content type revisions are shown on the content type view page (Revisions tab).
+
+**Media:** each `Media` document has `upload_info` (admin id/name/email/role, IP, user agent, original
+file name, MIME type, size, folder, brand, country). Pass `req` as the 4th argument to `uploadMedia()`.
+
 ---
 
 ## 12. Environment variables (read in `config/env.config.js`)
@@ -328,7 +372,7 @@ collection). It defines one job, `job queues`, which calls
 | `SESSION_STORAGE` | `file` | `file` \| `redis` |
 | `DOMAIN` | request host | `app.locals.baseURL` |
 | `FRONTEND_URL`, `CLIENT_NAME` (`Beaver`) | | branding |
-| `CMS_LOGO_LARGE`, `CMS_LOGO_SMALL` | beaver logo | admin logos |
+| `CMS_LOGO_LARGE`, `CMS_LOGO_SMALL` | none | admin logos (absolute http(s) URL or `/path`). Unset, invalid or failing to load → `CLIENT_NAME` is shown instead (initials when the sidebar is minimised). Small falls back to large |
 | `ADMIN_LANDING_URL` / `ADMIN_LANDING_URL_PRIVILEGE_ID` | `/admin/dashboard` / `dashboard.page` | |
 | `CAPTCHA_ENABLED`, `CAPTCHA_BASE_URL`, `CAPTCHA_SECRET_KEY` | off | admin login captcha |
 | `HAS_PDF_UPLOAD` | true | allow PDFs in media |
@@ -347,6 +391,10 @@ collection). It defines one job, `job queues`, which calls
 | `REDIS_URL` | `redis://localhost:6379` | |
 | `CACHE_KEY_PREFIX` | `beaver-data` | use a unique prefix per deployment that shares a Redis |
 | `SLACK_ADMIN_CHANNEL` | | Slack notifications |
+| `AUDIT_LOG_ENABLED` | true | set `false` to stop writing audit entries |
+| `AUDIT_LOG_RETENTION_DAYS` | 0 (keep forever) | TTL on `audit_logs`. To change it later, drop the `audit_ttl` index first |
+| `AUDIT_LOG_MAX_VALUE_LENGTH` | 2000 | longest string kept per value in diffs and request bodies |
+| `REVISION_LIMIT` | 6 | revisions kept per content / content type |
 
 Variables read elsewhere (SMS helper `APTIVA_*`, token expiry `WEB_USER_TOKEN_EXPIRY` and
 `MOBILE_USER_TOKEN_EXPIRY`, etc.) can be found with `grep -rn "process.env" --exclude-dir=node_modules .`

@@ -9,6 +9,15 @@ const Language = require('../../model/Language')
 const { default: collect } = require('collect.js')
 const { getBrandSettings } = require('../../helper/Cache.helper')
 const { logError } = require('../../helper/Logger.helper')
+const { audit, getClientIp } = require('../../helper/AuditLog.helper')
+
+// Login attempts have no session yet, so the actor is built from the submitted email.
+const loginActor = (admin, email) => ({
+    admin_id: admin?._id || null,
+    name: admin?.name,
+    email: admin?.email || email,
+    role: admin?.role,
+})
 
 // Handles the signup page rendering
 const signup = async (req, res) => {
@@ -70,6 +79,13 @@ const signupSubmit = async (req, res) => {
         })
 
         if (admin?._id) {
+            audit(req, {
+                module: 'auth',
+                action: 'signup',
+                actor: loginActor(admin),
+                entity: { type: 'admin', id: admin._id, label: admin.email },
+                meta: { role: 'super_admin', note: 'First super admin created' },
+            })
             await Country.create({
                 name: {
                     en: 'USA',
@@ -138,6 +154,13 @@ const loginSubmit = async (req, res) => {
         })
 
         if (validationResult.error) {
+            audit(req, {
+                module: 'auth',
+                action: 'login',
+                status: 'failure',
+                actor: loginActor(null, String(req.body?.email || '').slice(0, 100)),
+                meta: { reason: 'validation_failed' },
+            })
             // If validation fails, return the error with a 422 status code
             res.status(422).json(validationResult.error)
             return
@@ -150,11 +173,26 @@ const loginSubmit = async (req, res) => {
         })
 
         if (!admin) {
+            audit(req, {
+                module: 'auth',
+                action: 'login',
+                status: 'failure',
+                actor: loginActor(null, req.body.email),
+                meta: { reason: 'unknown_email' },
+            })
             // Return an error if no admin is found with the provided email
             return res.status(401).json({ error: 'Invalid email or password' })
         }
 
         if (!admin?.active) {
+            audit(req, {
+                module: 'auth',
+                action: 'login',
+                status: 'failure',
+                actor: loginActor(admin),
+                entity: { type: 'admin', id: admin._id, label: admin.email },
+                meta: { reason: 'account_blocked' },
+            })
             // Return an error if the admin account is inactive
             return res.status(401).json({
                 error: 'An administrator has blocked you from this app',
@@ -181,6 +219,7 @@ const loginSubmit = async (req, res) => {
             const session = req.session
             session.admin_id = admin?._id
             session.admin_name = admin?.name
+            session.admin_email = admin?.email
             session.admin_role = admin?.role
             session.admin_privileges = admin?.privileges
 
@@ -204,11 +243,42 @@ const loginSubmit = async (req, res) => {
                 settings: settings ? settings : {},
             }
 
+            await Admin.updateOne(
+                { _id: admin._id },
+                {
+                    $set: {
+                        last_login_at: new Date(),
+                        last_login_ip: getClientIp(req),
+                    },
+                }
+            )
+            audit(req, {
+                module: 'auth',
+                action: 'login',
+                entity: { type: 'admin', id: admin._id, label: admin.email },
+                // Short hash, not the session id itself: enough to correlate entries
+                meta: {
+                    session: require('crypto')
+                        .createHash('sha256')
+                        .update(String(req.sessionID))
+                        .digest('hex')
+                        .slice(0, 12),
+                },
+            })
+
             // Return a successful login response with redirection
             return res.status(200).json({
                 redirect_to: envConfig.general.ADMIN_LANDING_URL, // Redirect to the admin landing page
             })
         } else {
+            audit(req, {
+                module: 'auth',
+                action: 'login',
+                status: 'failure',
+                actor: loginActor(admin),
+                entity: { type: 'admin', id: admin._id, label: admin.email },
+                meta: { reason: 'wrong_password' },
+            })
             // Return an error if password comparison fails
             return res.status(401).json({ error: 'Invalid email or password' })
         }
@@ -227,8 +297,20 @@ const forgotCredentials = async (req, res) => {
 // Handles admin logout and session cleanup
 const logout = async (req, res) => {
     try {
+        if (req.session?.admin_id) {
+            audit(req, {
+                module: 'auth',
+                action: 'logout',
+                entity: {
+                    type: 'admin',
+                    id: req.session.admin_id,
+                    label: req.session.admin_email || req.session.admin_name,
+                },
+            })
+        }
         // Delete admin details from session
         delete req.session.admin_id
+        delete req.session.admin_email
         delete req.session.admin_name
         delete req.session.admin_role
         // Redirect to login page after logout

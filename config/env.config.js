@@ -15,12 +15,9 @@ const envConfig = {
         DOMAIN: process.env.DOMAIN,
         FRONTEND_URL: process.env.FRONTEND_URL,
         CLIENT_NAME: process.env.CLIENT_NAME || 'Beaver',
-        CMS_LOGO_LARGE:
-            process.env.CMS_LOGO_LARGE ||
-            '/cms-static/common/media/beaver-logo.png',
-        CMS_LOGO_SMALL:
-            process.env.CMS_LOGO_SMALL ||
-            '/cms-static/common/media/beaver-logo.png',
+        // Admin logos. When unset or not a usable URL, the admin shows CLIENT_NAME instead.
+        CMS_LOGO_LARGE: process.env.CMS_LOGO_LARGE || '',
+        CMS_LOGO_SMALL: process.env.CMS_LOGO_SMALL || '',
         ADMIN_LANDING_URL: process.env.ADMIN_LANDING_URL || '/admin/dashboard',
         ADMIN_LANDING_URL_PRIVILEGE_ID:
             process.env.ADMIN_LANDING_URL_PRIVILEGE_ID || 'dashboard.page',
@@ -79,6 +76,16 @@ const envConfig = {
     },
     slack: {
         ADMIN_CHANNEL: process.env.SLACK_ADMIN_CHANNEL,
+    },
+    audit: {
+        // Set AUDIT_LOG_ENABLED=false to stop writing audit entries.
+        ENABLED: process.env.AUDIT_LOG_ENABLED != 'false',
+        // Days to keep entries before MongoDB removes them (TTL index). 0 = keep forever.
+        RETENTION_DAYS: Number(process.env.AUDIT_LOG_RETENTION_DAYS) || 0,
+        // Longest string kept per value in a change diff or request body.
+        MAX_VALUE_LENGTH: Number(process.env.AUDIT_LOG_MAX_VALUE_LENGTH) || 2000,
+        // How many revisions to keep on content and content types.
+        REVISION_LIMIT: Number(process.env.REVISION_LIMIT) || 6,
     },
     sms_url: '',
 }

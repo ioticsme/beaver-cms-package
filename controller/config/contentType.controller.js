@@ -12,6 +12,34 @@ const envConfig = require('../../config/env.config')
 const { logError } = require('../../helper/Logger.helper')
 const AdminNav = require('../../model/AdminNav')
 const { getNavigation } = require('../../middleware/cms.middleware')
+const { getRevisionObject } = require('../../helper/Revision.helper')
+const { audit } = require('../../helper/AuditLog.helper')
+
+// Update a content type, keeping a revision of its previous state and an audit entry.
+const updateWithRevision = async (req, id, update, action) => {
+    const before = await ContentType.findOne({ _id: id })
+    if (!before) return null
+    const revisions = getRevisionObject(before, req.authUser)
+    const $set = {
+        ...(update.$set || update),
+        revisions,
+        last_edited_user: req.authUser?.admin_id,
+    }
+    await ContentType.updateOne({ _id: id }, { $set })
+    const after = await ContentType.findOne({ _id: id }).lean()
+    audit(req, {
+        module: 'content_type',
+        action,
+        entity: { type: 'content_type', id, label: after?.title },
+        before,
+        after,
+        meta: {
+            slug: after?.slug,
+            revision: revisions[revisions.length - 1]?.revision_number,
+        },
+    })
+    return after
+}
 
 const list = async (req, res) => {
     try {
@@ -193,15 +221,22 @@ const save = async (req, res) => {
         let c_type_id
         if (req.body.id) {
             c_type_id = req.body.id
-            await ContentType.updateOne(
-                {
-                    _id: req.body.id,
-                },
-                data
-            )
+            const updated = await updateWithRevision(req, req.body.id, data, 'update')
+            if (!updated) {
+                return res.status(404).json({ error: 'Content type not found' })
+            }
         } else {
-            const new_c_type = await ContentType.create(data)
+            const new_c_type = await ContentType.create({
+                ...data,
+                last_edited_user: req.authUser?.admin_id,
+            })
             c_type_id = new_c_type.id
+            audit(req, {
+                module: 'content_type',
+                action: 'create',
+                entity: { type: 'content_type', id: new_c_type._id, label: new_c_type.title },
+                after: new_c_type,
+            })
         }
 
         await removeCache([
@@ -232,8 +267,18 @@ const deleteItem = async (req, res) => {
             return res.status(404).json({ error: 'Id not found' })
         }
 
-        //soft delete item
+        const before = await ContentType.findOne({ _id: id }).lean()
+        if (!before) {
+            return res.status(404).json({ error: 'Content type not found' })
+        }
+        // Hard delete: the audit entry keeps a full snapshot so it can be rebuilt.
         await ContentType.deleteOne({ _id: id })
+        audit(req, {
+            module: 'content_type',
+            action: 'delete',
+            entity: { type: 'content_type', id, label: before.title },
+            meta: { snapshot: { ...before, revisions: undefined } },
+        })
         await removeCache([
             `${envConfig.cache.CACHE_KEY_PREFIX}-mixed-privileges-${req.authUser?.brand?.code}-${req.authUser?.brand?.country_code}`,
             `${envConfig.cache.CACHE_KEY_PREFIX}-mixed-nav-${req.authUser?.brand?.code}-${req.authUser?.brand?.country_code}`,
@@ -357,16 +402,15 @@ const saveFields = async (req, res) => {
         // return false
 
         // console.log(fields_to_update)
-        await ContentType.updateOne(
-            {
-                _id: req.body.id,
-            },
-            {
-                $set: {
-                    field_groups: fields_to_update,
-                },
-            }
+        const updated = await updateWithRevision(
+            req,
+            req.body.id,
+            { field_groups: fields_to_update },
+            'update_fields'
         )
+        if (!updated) {
+            return res.status(404).json({ error: 'Content type not found' })
+        }
 
         await removeCache([
             `${envConfig.cache.CACHE_KEY_PREFIX}-mixed-privileges-${req.authUser?.brand?.code}-${req.authUser?.brand?.country_code}`,
@@ -400,16 +444,15 @@ const saveMeta = async (req, res) => {
         if (validationResult.error) {
             return res.status(422).json(validationResult.error)
         }
-        await ContentType.updateOne(
-            {
-                _id: req.body._id,
-            },
-            {
-                $set: {
-                    meta: req.body.meta,
-                },
-            }
+        const updated = await updateWithRevision(
+            req,
+            req.body._id,
+            { meta: req.body.meta },
+            'update_meta'
         )
+        if (!updated) {
+            return res.status(404).json({ error: 'Content type not found' })
+        }
 
         return res.status(200).json({ message: 'Content Type Meta updated' })
     } catch (e) {
